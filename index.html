@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FB 粉絲專頁抽獎工具 - 簡約現代版</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PapaParse for CSV Parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <!-- Canvas Confetti for Celebration Effects -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .slot-animation {
+      transition: all 0.05s ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-12">
+
+  <!-- Header Section -->
+  <header class="bg-white border-b border-slate-200 py-6 mb-8 shadow-sm">
+    <div class="max-w-5xl mx-auto px-4 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-bold text-xl shadow-md">
+          🎁
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-slate-800">FB 留言抽獎小幫手</h1>
+          <p class="text-xs text-slate-500">簡約高效 ‧ 精準過濾 ‧ 一鍵導出</p>
+        </div>
+      </div>
+      <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100">
+        完全免費 ‧ 純前端運行
+      </span>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 space-y-6">
+
+    <!-- Step 1: Upload CSV -->
+    <section class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm">
+      <h2 class="text-lg font-semibold text-slate-800 mb-4 flex items-center">
+        <span class="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold mr-2">1</span>
+        上傳 FB 留言 CSV 檔案
+      </h2>
+      <div class="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-8 text-center bg-slate-50/50 hover:bg-slate-50 transition-all cursor-pointer relative" id="drop-zone">
+        <input type="file" id="csv-file-input" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+        <div class="space-y-2 pointer-events-none">
+          <div class="text-3xl">📁</div>
+          <p class="text-sm font-medium text-slate-700" id="file-status-text">點擊上傳或拖曳 FB 留言 CSV 檔至此區域</p>
+          <p class="text-xs text-slate-400">自動支援相容「順序、留言時間、留言者、留言內容」欄位</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 2: Settings & Filters -->
+    <section class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <h2 class="text-lg font-semibold text-slate-800 flex items-center">
+        <span class="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold mr-2">2</span>
+        篩選條件與截止時間
+      </h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- 關鍵字與 Tag -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">包含關鍵字 (留空代表不限)</label>
+            <input type="text" id="keyword-filter" placeholder="例：捷運、抽獎" class="w-full px-3.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+          </div>
+          <div class="flex items-center space-x-2 pt-2">
+            <input type="checkbox" id="tag-filter" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+            <label for="tag-filter" class="text-sm text-slate-700 font-medium">必須 Tag 好友 (留言內容包含 <code class="bg-slate-100 px-1 rounded text-indigo-600">@</code>)</label>
+          </div>
+        </div>
+
+        <!-- 截止時間 -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">留言截止時間 (不設代表全抓)</label>
+            <input type="datetime-local" id="cutoff-time" class="w-full px-3.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+          </div>
+          <div class="flex items-center space-x-2 pt-2">
+            <input type="checkbox" id="dedupe-filter" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500" checked>
+            <label for="dedupe-filter" class="text-sm text-slate-700 font-medium">排除重複留言（同一個人只算一次資格）</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter Action & Stats -->
+      <div class="pt-4 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
+        <button id="apply-filter-btn" class="w-full md:w-auto px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-medium text-sm rounded-lg transition-colors shadow-sm">
+          套用篩選並更新名單
+        </button>
+        <div id="stats-display" class="text-xs text-slate-500 space-x-3">
+          <span>原始總數：<strong id="stat-total">0</strong></span>
+          <span>符合資格：<strong id="stat-valid" class="text-indigo-600 font-semibold">0</strong></span>
+          <span>不符合排除：<strong id="stat-excluded" class="text-rose-500">0</strong></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: Prizes & Draw -->
+    <section class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <h2 class="text-lg font-semibold text-slate-800 flex items-center">
+        <span class="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold mr-2">3</span>
+        獎項設定與開始抽獎
+      </h2>
+
+      <!-- Prize Settings -->
+      <div id="prize-list" class="space-y-3">
+        <!-- Default Item -->
+        <div class="prize-item flex items-center space-x-3">
+          <input type="text" placeholder="獎項名稱（例：頭獎 捷運紀念品）" value="首獎 捷運好禮" class="prize-name flex-1 px-3.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+          <input type="number" placeholder="人數" value="1" min="1" class="prize-count w-24 px-3.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+          <button class="remove-prize-btn text-slate-400 hover:text-rose-500 p-2 text-sm font-bold">✕</button>
+        </div>
+      </div>
+
+      <button id="add-prize-btn" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center">
+        + 新增更多獎項
+      </button>
+
+      <!-- Draw Slot Box -->
+      <div class="bg-slate-900 rounded-2xl p-8 text-center text-white space-y-4 shadow-inner relative overflow-hidden">
+        <div class="text-xs uppercase tracking-widest text-slate-400 font-semibold" id="current-drawing-prize">準備抽獎</div>
+        <div id="slot-display" class="text-3xl md:text-5xl font-extrabold tracking-wide min-h-[60px] flex items-center justify-center text-indigo-300">
+          ---
+        </div>
+        <div>
+          <button id="start-draw-btn" disabled class="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold rounded-xl shadow-lg transition-all transform active:scale-95 text-base">
+            🚀 開始抽獎
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 4: Results -->
+    <section class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-slate-800 flex items-center">
+          <span class="w-7 h-7 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold mr-2">4</span>
+          中獎名單
+        </h2>
+        <button id="export-csv-btn" disabled class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white disabled:text-slate-400 rounded-lg text-xs font-semibold shadow-sm transition-colors">
+          📥 一鍵匯出得獎 CSV
+        </button>
+      </div>
+
+      <div class="overflow-x-auto border border-slate-100 rounded-xl">
+        <table class="w-full text-left text-xs text-slate-600">
+          <thead class="bg-slate-50 text-slate-700 border-b border-slate-100 font-semibold uppercase tracking-wider">
+            <tr>
+              <th class="py-3 px-4">獎項</th>
+              <th class="py-3 px-4">得獎者</th>
+              <th class="py-3 px-4">留言時間</th>
+              <th class="py-3 px-4">留言內容</th>
+            </tr>
+          </thead>
+          <tbody id="winners-table-body" class="divide-y divide-slate-100">
+            <tr>
+              <td colspan="4" class="py-8 text-center text-slate-400">尚無得獎資料，請開始抽獎</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // State Management
+    let rawData = [];
+    let filteredData = [];
+    let winnersList = [];
+
+    // DOM Elements
+    const fileInput = document.getElementById('csv-file-input');
+    const fileStatusText = document.getElementById('file-status-text');
+    const keywordFilter = document.getElementById('keyword-filter');
+    const tagFilter = document.getElementById('tag-filter');
+    const cutoffTime = document.getElementById('cutoff-time');
+    const dedupeFilter = document.getElementById('dedupe-filter');
+    const applyFilterBtn = document.getElementById('apply-filter-btn');
+    const prizeListContainer = document.getElementById('prize-list');
+    const addPrizeBtn = document.getElementById('add-prize-btn');
+    const startDrawBtn = document.getElementById('start-draw-btn');
+    const slotDisplay = document.getElementById('slot-display');
+    const currentDrawingPrize = document.getElementById('current-drawing-prize');
+    const winnersTableBody = document.getElementById('winners-table-body');
+    const exportCsvBtn = document.getElementById('export-csv-btn');
+
+    // Stats
+    const statTotal = document.getElementById('stat-total');
+    const statValid = document.getElementById('stat-valid');
+    const statExcluded = document.getElementById('stat-excluded');
+
+    // Parse Chinese Date String (e.g. "2026年7月21日 星期二下午3:50")
+    function parseChineseDate(dateStr) {
+      if (!dateStr) return null;
+      try {
+        let cleaned = dateStr.replace(/星期[一二三四五六日]/g, '').trim();
+        let isPM = cleaned.includes('下午');
+        let isAM = cleaned.includes('上午');
+        cleaned = cleaned.replace('下午', ' ').replace('上午', ' ').trim();
+
+        const match = cleaned.match(/(\d{4})年(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})/);
+        if (match) {
+          let [_, year, month, day, hour, minute] = match.map(Number);
+          if (isPM && hour < 12) hour += 12;
+          if (isAM && hour === 12) hour = 0;
+          return new Date(year, month - 1, day, hour, minute);
+        }
+        return new Date(dateStr); // Fallback standard parsing
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // Handle CSV File Upload
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      fileStatusText.textContent = `已載入：${file.name}`;
+      
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          rawData = results.data.map(item => ({
+            order: item['順序'] || '',
+            timeStr: item['留言時間'] || '',
+            dateObj: parseChineseDate(item['留言時間']),
+            user: item['留言者'] || '無名氏',
+            content: item['留言內容'] || ''
+          }));
+
+          processFilter();
+        }
+      });
+    });
+
+    // Process Filters
+    function processFilter() {
+      if (rawData.length === 0) return;
+
+      const keyword = keywordFilter.value.trim().toLowerCase();
+      const requireTag = tagFilter.checked;
+      const dedupe = dedupeFilter.checked;
+      const cutoffVal = cutoffTime.value ? new Date(cutoffTime.value) : null;
+
+      let seenUsers = new Set();
+      filteredData = [];
+      let excludedCount = 0;
+
+      rawData.forEach(item => {
+        let isValid = true;
+
+        // Keyword check
+        if (keyword && !item.content.toLowerCase().includes(keyword)) {
+          isValid = false;
+        }
+
+        // Tag check
+        if (requireTag && !item.content.includes('@')) {
+          isValid = false;
+        }
+
+        // Cutoff time check
+        if (cutoffVal && item.dateObj && item.dateObj > cutoffVal) {
+          isValid = false;
+        }
+
+        // Deduplicate check
+        if (dedupe && seenUsers.has(item.user)) {
+          isValid = false;
+        }
+
+        if (isValid) {
+          if (dedupe) seenUsers.add(item.user);
+          filteredData.push(item);
+        } else {
+          excludedCount++;
+        }
+      });
+
+      // Update Stats
+      statTotal.textContent = rawData.length;
+      statValid.textContent = filteredData.length;
+      statExcluded.textContent = excludedCount;
+
+      startDrawBtn.disabled = filteredData.length === 0;
+    }
+
+    applyFilterBtn.addEventListener('click', processFilter);
+
+    // Prize List Management
+    addPrizeBtn.addEventListener('click', () => {
+      const div = document.createElement('div');
+      div.className = 'prize-item flex items-center space-x-3';
+      div.innerHTML = `
+        <input type="text" placeholder="獎項名稱" value="特別獎" class="prize-name flex-1 px-3.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+        <input type="number" placeholder="人數" value="1" min="1" class="prize-count w-24 px-3.5 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+        <button class="remove-prize-btn text-slate-400 hover:text-rose-500 p-2 text-sm font-bold">✕</button>
+      `;
+      prizeListContainer.appendChild(div);
+    });
+
+    prizeListContainer.addEventListener('click', (e) => {
+      if (e.target.classList.contains('remove-prize-btn')) {
+        const items = prizeListContainer.querySelectorAll('.prize-item');
+        if (items.length > 1) {
+          e.target.closest('.prize-item').remove();
+        }
+      }
+    });
+
+    // Draw Lottery Logic
+    startDrawBtn.addEventListener('click', async () => {
+      const prizeElements = document.querySelectorAll('.prize-item');
+      let prizesToDraw = [];
+
+      prizeElements.forEach(item => {
+        const name = item.querySelector('.prize-name').value.trim() || '未命名獎項';
+        const count = parseInt(item.querySelector('.prize-count').value, 10) || 1;
+        prizesToDraw.push({ name, count });
+      });
+
+      // Clone pool to prevent empty pool errors
+      let pool = [...filteredData];
+      winnersList = [];
+      winnersTableBody.innerHTML = '';
+
+      startDrawBtn.disabled = true;
+
+      for (let p = 0; p < prizesToDraw.length; p++) {
+        const prize = prizesToDraw[p];
+        currentDrawingPrize.textContent = `正為【${prize.name}】（共 ${prize.count} 名）抽獎中...`;
+
+        for (let c = 0; c < prize.count; c++) {
+          if (pool.length === 0) break;
+
+          // Animation
+          await runSlotAnimation();
+
+          // Pick winner
+          const winnerIndex = Math.floor(Math.random() * pool.length);
+          const winner = pool.splice(winnerIndex, 1)[0]; // Remove winner from pool
+
+          winnersList.push({
+            prizeName: prize.name,
+            user: winner.user,
+            timeStr: winner.timeStr,
+            content: winner.content,
+            order: winner.order
+          });
+
+          // Display Last Winner
+          slotDisplay.textContent = winner.user;
+          confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+
+          // Append to Table
+          appendWinnerToTable(prize.name, winner);
+        }
+      }
+
+      currentDrawingPrize.textContent = '🎉 所有獎項抽獎完成！';
+      startDrawBtn.disabled = false;
+      exportCsvBtn.disabled = winnersList.length === 0;
+    });
+
+    function runSlotAnimation() {
+      return new Promise(resolve => {
+        let counter = 0;
+        const maxCounter = 20;
+        const interval = setInterval(() => {
+          const randomIndex = Math.floor(Math.random() * filteredData.length);
+          slotDisplay.textContent = filteredData[randomIndex].user;
+          counter++;
+
+          if (counter >= maxCounter) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 60);
+      });
+    }
+
+    function appendWinnerToTable(prizeName, winner) {
+      if (winnersTableBody.querySelector('td[colspan]')) {
+        winnersTableBody.innerHTML = '';
+      }
+
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-slate-50 transition-colors';
+      tr.innerHTML = `
+        <td class="py-3 px-4 font-medium text-indigo-600">${prizeName}</td>
+        <td class="py-3 px-4 font-bold text-slate-800">${winner.user}</td>
+        <td class="py-3 px-4 text-slate-400">${winner.timeStr}</td>
+        <td class="py-3 px-4 max-w-xs truncate" title="${winner.content}">${winner.content}</td>
+      `;
+      winnersTableBody.appendChild(tr);
+    }
+
+    // Export CSV
+    exportCsvBtn.addEventListener('click', () => {
+      if (winnersList.length === 0) return;
+
+      const csvData = winnersList.map(w => ({
+        '獎項': w.prizeName,
+        '得獎者': w.user,
+        '原始順序': w.order,
+        '留言時間': w.timeStr,
+        '留言內容': w.content
+      }));
+
+      const csv = Papa.unparse(csvData);
+      const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `FB得獎名單_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>
